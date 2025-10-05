@@ -458,6 +458,28 @@ async function promptMenuSelection(message, rawChoices, options = {}) {
     ...choice,
     index: index + 1,
   }));
+  const resolveQuickOption = () => {
+    const isMatch = (option, target) => {
+      if (!option) return false;
+      const value = option.value;
+      if (typeof value === "string" && value.toLowerCase() === target) {
+        return true;
+      }
+      const rawValue = option.raw && option.raw.value;
+      if (typeof rawValue === "string" && rawValue.toLowerCase() === target) {
+        return true;
+      }
+      return false;
+    };
+    const backOption = displayOptions.find((option) => isMatch(option, "__back"));
+    if (backOption) return backOption;
+    const exitOption = displayOptions.find((option) => isMatch(option, "exit"));
+    if (exitOption) return exitOption;
+    const quitOption = displayOptions.find((option) => isMatch(option, "quit"));
+    if (quitOption) return quitOption;
+    return null;
+  };
+  const quickOption = resolveQuickOption();
   const valueKeyMap = new Map();
   const labelKeyMap = new Map();
   const directValueMap = new Map();
@@ -507,13 +529,17 @@ async function promptMenuSelection(message, rawChoices, options = {}) {
     console.log("");
     console.log(message);
     const hints = ["Secim yapmak icin numarayi yazip Enter'a basin."];
+    if (quickOption) {
+      hints.push("'q' yazarak hizli cikis/geri yapabilirsin.");
+    }
     if (defaultOption) {
       hints.push(`Varsayilan: ${defaultOption.index}. ${defaultOption.name}`);
     }
     console.log(dim(hints.join(" ")));
     for (const option of displayOptions) {
       const marker = defaultOption && option.value === defaultOption.value ? dim(" (varsayilan)") : "";
-      console.log(`${option.index}. ${option.name}${marker}`);
+      const shortcut = quickOption && option.value === quickOption.value ? dim(" [q]") : "";
+      console.log(`${option.index}. ${option.name}${marker}${shortcut}`);
     }
     const { selection } = await inquirerPromptOriginal([
       {
@@ -531,6 +557,9 @@ async function promptMenuSelection(message, rawChoices, options = {}) {
       continue;
     }
     const normalizedInput = selection.toString().trim();
+    if (quickOption && normalizedInput.toLowerCase() === "q") {
+      return quickOption.value;
+    }
     const numeric = Number(normalizedInput);
     if (Number.isInteger(numeric) && numeric >= 1 && numeric <= displayOptions.length) {
       return displayOptions[numeric - 1].value;
