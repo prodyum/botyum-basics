@@ -57,19 +57,34 @@ function printDivider() {
 
 // Basit curl wrapper
 async function curl(url, headers = {}, timeoutSec = 20, method = "GET", body = null) {
-  const headerArgs = Object.entries({
+  const baseHeaders = {
     "User-Agent": "Mozilla/5.0",
     "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
     ...headers,
-  })
+  };
+  const hasAcceptEncoding = Object.keys(baseHeaders).some((k) => k.toLowerCase() === "accept-encoding");
+  const headerArgs = Object.entries(baseHeaders)
     .map(([k, v]) => `-H "${k}: ${v}"`)
     .join(" ");
   const bodyArg = body ? `--data-raw '${body}'` : "";
-  const cmd = `curl -m ${timeoutSec} -Ls ${headerArgs} --compressed -X ${method} ${bodyArg} "${url}"`;
+  const cmdCompressed = `curl -m ${timeoutSec} -Ls ${headerArgs} --compressed -X ${method} ${bodyArg} "${url}"`;
   try {
-    const { stdout } = await exec(cmd);
+    const { stdout } = await exec(cmdCompressed);
     return stdout;
   } catch (error) {
+    // Bazı Windows kurulumlarındaki curl, --compressed bayragini desteklemez.
+    // Bu durumda sikistirma talep etmeden tekrar dene (gerekirse Accept-Encoding: identity).
+    const message = String(error?.message || "");
+    if (message.includes("--compressed")) {
+      const headerArgsNoCompress = hasAcceptEncoding ? headerArgs : `${headerArgs} -H "Accept-Encoding: identity"`;
+      const cmdUncompressed = `curl -m ${timeoutSec} -Ls ${headerArgsNoCompress} -X ${method} ${bodyArg} "${url}"`;
+      try {
+        const { stdout } = await exec(cmdUncompressed);
+        return stdout;
+      } catch (fallbackError) {
+        throw new Error(`curl hatasi: ${fallbackError.message}`);
+      }
+    }
     throw new Error(`curl hatasi: ${error.message}`);
   }
 }
