@@ -1,15 +1,17 @@
 // Description: Implements the time difference features.
 
+import { parseFlexibleDateTime } from "../core/utils.js";
+
 export function createTimeDifferenceGroup(ctx) {
-  const { inquirer, ok, err, dim, DateTime, Interval } = ctx;
+  const { inquirer, ok, err, dim, Interval } = ctx;
 
   async function calculateDifference() {
     const answers = await inquirer.prompt([
-      { type: "input", name: "start", message: "Başlangıç (ISO)" },
-      { type: "input", name: "end", message: "Bitiş (ISO)" },
+      { type: "input", name: "start", message: "Başlangıç (örn: 12.10.2025 09:00, 12/10/2025 09:00, 2025-10-12 09:00)" },
+      { type: "input", name: "end", message: "Bitiş (örn: 20.10.2025 18:30, 20/10/2025 18:30, 2025-10-20 18:30)" },
     ]);
-    const start = DateTime.fromISO(answers.start, { setZone: true });
-    const end = DateTime.fromISO(answers.end, { setZone: true });
+    const start = parseFlexibleDateTime(answers.start);
+    const end = parseFlexibleDateTime(answers.end);
     if (!start.isValid || !end.isValid) {
       console.log(err("Geçersiz tarih/saat."));
       return;

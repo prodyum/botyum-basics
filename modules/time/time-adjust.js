@@ -1,11 +1,13 @@
 // Description: Implements the time adjust features.
 
+import { parseFlexibleDateTime } from "../core/utils.js";
+
 export function createTimeAdjustGroup(ctx) {
   const { inquirer, ok, err, DateTime, Duration } = ctx;
 
   async function adjustTime() {
     const answers = await inquirer.prompt([
-      { type: "input", name: "base", message: "Taban ISO (boş: şimdi)" },
+      { type: "input", name: "base", message: "Taban (boş: şimdi) (örn: 12.10.2025 09:00)" },
       { type: "list", name: "operation", message: "İşlem", choices: ["Ekle", "Çıkar"] },
       { type: "number", name: "years", message: "Yıl", default: 0 },
       { type: "number", name: "months", message: "Ay", default: 0 },
@@ -14,7 +16,7 @@ export function createTimeAdjustGroup(ctx) {
       { type: "number", name: "minutes", message: "Dakika", default: 0 },
       { type: "number", name: "seconds", message: "Saniye", default: 0 },
     ]);
-    let dt = answers.base ? DateTime.fromISO(answers.base, { setZone: true }) : DateTime.now();
+    let dt = answers.base ? parseFlexibleDateTime(answers.base) : DateTime.now();
     if (!dt.isValid) {
       console.log(err("Geçersiz taban tarih."));
       return;

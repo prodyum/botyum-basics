@@ -23,19 +23,42 @@ export function createPriceWatchGroup(ctx) {
       }
     }
     if (!data) {
+      // 1) CoinGecko dene (opsiyonel API anahtarıyla)
+      const cgHeaders = { Accept: "application/json" };
+      const cgKey = process.env.COINGECKO_API_KEY || process.env.CG_DEMO_KEY;
+      if (cgKey) {
+        cgHeaders["x-cg-demo-api-key"] = cgKey; // demo anahtarı uyumlu
+        cgHeaders["x-cg-pro-api-key"] = cgKey; // pro anahtarı uyumlu
+      }
+      const cgUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd";
+      let fetched = null;
       try {
-        const response = await curl(
-          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd",
-          { Accept: "application/json" },
-          15,
-        );
-        data = JSON.parse(response);
-        await ensureBotyumDir();
-        await fs.writeJson(cacheFile, data);
-      } catch (error) {
-        console.log(err(`Fiyat verisi alınamadı: ${error.message}`));
+        const response = await curl(cgUrl, cgHeaders, 15);
+        fetched = JSON.parse(response);
+      } catch {
+        fetched = null;
+      }
+      // 2) Coinbase yedek
+      if (!fetched) {
+        try {
+          const btcJson = JSON.parse(await curl("https://api.coinbase.com/v2/prices/BTC-USD/spot", { Accept: "application/json" }, 15));
+          const ethJson = JSON.parse(await curl("https://api.coinbase.com/v2/prices/ETH-USD/spot", { Accept: "application/json" }, 15));
+          const btc = Number(btcJson?.data?.amount);
+          const eth = Number(ethJson?.data?.amount);
+          if (Number.isFinite(btc) && Number.isFinite(eth)) {
+            fetched = { bitcoin: { usd: btc }, ethereum: { usd: eth } };
+          }
+        } catch {
+          fetched = null;
+        }
+      }
+      if (!fetched) {
+        console.log(err("Fiyat verisi alınamadı: ağ engeli veya sağlayıcı kısıtlaması."));
         return;
       }
+      data = fetched;
+      await ensureBotyumDir();
+      await fs.writeJson(cacheFile, data);
     }
     console.log(ok(`BTC/USD → ${data.bitcoin?.usd}`));
     console.log(ok(`ETH/USD → ${data.ethereum?.usd}`));

@@ -82,10 +82,18 @@ async function curl(url, headers = {}, timeoutSec = 20, method = "GET", body = n
         const { stdout } = await exec(cmdUncompressed);
         return stdout;
       } catch (fallbackError) {
-        throw new Error(`curl hatasi: ${fallbackError.message}`);
+        const concise = "Ağ isteği başarısız. İnternet/proxy/sağlayıcı kısıtı olabilir.";
+        if (process.env.DEBUG) {
+          throw new Error(`${concise} (${fallbackError.message})`);
+        }
+        throw new Error(concise);
       }
     }
-    throw new Error(`curl hatasi: ${error.message}`);
+    const concise = "Ağ isteği başarısız. İnternet/proxy/sağlayıcı kısıtı olabilir.";
+    if (process.env.DEBUG) {
+      throw new Error(`${concise} (${error.message})`);
+    }
+    throw new Error(concise);
   }
 }
 

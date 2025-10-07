@@ -4,6 +4,7 @@
 
 import Table from "cli-table3";
 import { DateTime } from "luxon";
+import { parseFlexibleDateTime } from "../core/utils.js";
 
 export function createCalendarGroup(ctx) {
   const { inquirer, ok, err, readStore, writeStore, scheduleAbsolute } = ctx;
@@ -23,13 +24,18 @@ export function createCalendarGroup(ctx) {
     if (action === "Oluştur") {
       const event = await inquirer.prompt([
         { type: "input", name: "summary", message: "Başlık" },
-        { type: "input", name: "start", message: "Başlangıç ISO" },
+        { type: "input", name: "start", message: "Başlangıç (örn: 01.12.2025 14:00 veya 2025-12-01 14:00)" },
         { type: "number", name: "duration", message: "Süre (dk)", default: 60 },
         { type: "input", name: "location", message: "Yer (opsiyonel)", default: "" },
         { type: "editor", name: "description", message: "Açıklama" },
       ]);
-      const startISO = DateTime.fromISO(event.start).toISO();
-      const endISO = DateTime.fromISO(event.start)
+      const startDT = parseFlexibleDateTime(event.start);
+      if (!startDT.isValid) {
+        console.log(err("Geçersiz başlangıç."));
+        return;
+      }
+      const startISO = startDT.toISO();
+      const endISO = startDT
         .plus({ minutes: event.duration || 60 })
         .toISO();
       const id = `ev-${Date.now()}`;
@@ -62,12 +68,18 @@ export function createCalendarGroup(ctx) {
       }
       const updates = await inquirer.prompt([
         { type: "input", name: "summary", message: "Başlık", default: event.summary },
-        { type: "input", name: "startISO", message: "Başlangıç ISO", default: event.startISO },
-        { type: "input", name: "endISO", message: "Bitiş ISO", default: event.endISO },
+        { type: "input", name: "startISO", message: "Başlangıç (örn: 01.12.2025 14:00)", default: event.startISO },
+        { type: "input", name: "endISO", message: "Bitiş (örn: 01.12.2025 15:00)", default: event.endISO },
         { type: "input", name: "location", message: "Yer", default: event.location || "" },
         { type: "editor", name: "desc", message: "Açıklama", default: event.desc || "" },
       ]);
-      Object.assign(event, updates);
+      const updStart = parseFlexibleDateTime(updates.startISO);
+      const updEnd = parseFlexibleDateTime(updates.endISO);
+      if (!updStart.isValid || !updEnd.isValid) {
+        console.log(err("Geçersiz başlangıç/bitiş."));
+        return;
+      }
+      Object.assign(event, { ...updates, startISO: updStart.toISO(), endISO: updEnd.toISO() });
       await writeStore(store);
       console.log(ok("Güncellendi."));
       return;

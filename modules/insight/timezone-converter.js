@@ -1,18 +1,19 @@
 // Description: Implements the timezone converter features.
 
 import { DateTime } from "luxon";
+import { parseFlexibleDateTime } from "../core/utils.js";
 
 export function createTimezoneConverterGroup(ctx) {
   const { inquirer, ok, err } = ctx;
 
   async function convertTime() {
     const answers = await inquirer.prompt([
-      { type: "input", name: "sourceZone", message: "Kaynak zaman dilimi", default: "UTC" },
-      { type: "input", name: "time", message: "Zaman (ISO veya HH:mm)" },
-      { type: "input", name: "targetZone", message: "Hedef zaman dilimi", default: "UTC" },
+      { type: "input", name: "sourceZone", message: "Kaynak zaman dilimi (örn: Europe/Istanbul)", default: "UTC" },
+      { type: "input", name: "time", message: "Zaman (örn: 12.10.2025 09:00 ya da 14:30)" },
+      { type: "input", name: "targetZone", message: "Hedef zaman dilimi (örn: UTC)", default: "UTC" },
     ]);
     const base = answers.time || DateTime.now().toISO();
-    const dt = DateTime.fromISO(base, { zone: answers.sourceZone });
+    const dt = parseFlexibleDateTime(base, { zone: answers.sourceZone, now: DateTime.now().setZone(answers.sourceZone) });
     if (!dt.isValid) {
       console.log(err("Geçersiz zaman girdisi."));
       return;

@@ -7,7 +7,7 @@ export function createCurrentTimeGroup(ctx) {
 
   async function showCurrentTime() {
     const { country } = await inquirer.prompt([
-      { type: "input", name: "country", message: "Ülke adı veya ISO kodu" },
+      { type: "input", name: "country", message: "Ülke adı veya ISO kodu (örn: Türkiye / TR)" },
     ]);
     const zones = countryToTimezones(country, ct, getCountryCode);
     if (!zones.length) {

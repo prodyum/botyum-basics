@@ -6,6 +6,7 @@ import path from "path";
 import { DateTime } from "luxon";
 
 import { ensureDir } from "./utils.js";
+import { parseFlexibleDateTime } from "../core/utils.js";
 
 export function createIcsEventGroup(ctx) {
   const { inquirer, ok, err, title, printDivider } = ctx;
@@ -21,12 +22,12 @@ export function createIcsEventGroup(ctx) {
   async function createEvent() {
     const answers = await inquirer.prompt([
       { type: "input", name: "summary", message: "Başlık" },
-      { type: "input", name: "start", message: "Başlangıç (ISO, ör: 2025-12-01T14:00)" },
+      { type: "input", name: "start", message: "Başlangıç (örn: 01.12.2025 14:00)" },
       { type: "number", name: "duration", message: "Süre (dakika)", default: 60 },
       { type: "input", name: "location", message: "Yer (opsiyonel)", default: "" },
       { type: "editor", name: "description", message: "Açıklama (opsiyonel)" },
     ]);
-    const start = DateTime.fromISO(answers.start, { setZone: true });
+    const start = parseFlexibleDateTime(answers.start);
     if (!start.isValid) {
       console.log(err("Geçersiz başlangıç."));
       return;

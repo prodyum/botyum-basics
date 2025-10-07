@@ -1,18 +1,16 @@
 // Description: Implements the alarm features.
 
+import { parseFlexibleDateTime } from "../core/utils.js";
+
 export function createAlarmGroup(ctx) {
   const { inquirer, ok, err, DateTime, readStore, writeStore } = ctx;
 
   async function scheduleAlarm() {
     const { whenStr, message } = await inquirer.prompt([
-      { type: "input", name: "whenStr", message: "Zaman (ISO veya HH:mm)" },
+      { type: "input", name: "whenStr", message: "Zaman (örn: 12.10.2025 14:30 ya da 08:45)" },
       { type: "input", name: "message", message: "Mesaj", default: "Alarm!" },
     ]);
-    let when = DateTime.fromISO(whenStr, { setZone: true });
-    if (!when.isValid && /^\d{1,2}:\d{2}$/.test(whenStr)) {
-      const [H, M] = whenStr.split(":").map(Number);
-      when = DateTime.now().set({ hour: H, minute: M, second: 0, millisecond: 0 });
-    }
+    let when = parseFlexibleDateTime(whenStr);
     if (!when.isValid) {
       console.log(err("Geçerli bir zaman gir."));
       return;
