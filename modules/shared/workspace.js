@@ -59,12 +59,34 @@ export function createWorkspaceHelpers(ctx) {
   async function runTesseract(imagePath) {
     const have = await hasCommand("tesseract");
     if (!have) return "";
+    // Mevcut dilleri tespit edip uygun dil kombinasyonuna düş
+    async function listLangs() {
+      try {
+        const { stdout } = await exec("tesseract --list-langs");
+        return String(stdout || "")
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter((s) => s && !/^List of available languages/.test(s));
+      } catch {
+        return [];
+      }
+    }
+    const langs = new Set(await listLangs());
+    const wanted = ["tur", "eng"]; // öncelik TR+EN
+    const available = wanted.filter((l) => langs.has(l));
+    const primaryArg = available.length ? ` -l ${available.join("+")}` : "";
+    const outBase = path.join(TMP, `ocr-${Date.now()}`);
     try {
-      const outBase = path.join(TMP, `ocr-${Date.now()}`);
-      await exec(`tesseract "${imagePath}" "${outBase}" -l tur+eng`);
+      await exec(`tesseract "${imagePath}" "${outBase}"${primaryArg}`);
       return fs.readFile(`${outBase}.txt`, "utf8");
     } catch {
-      return "";
+      // Son çare: dil belirtmeden dene
+      try {
+        await exec(`tesseract "${imagePath}" "${outBase}"`);
+        return fs.readFile(`${outBase}.txt`, "utf8");
+      } catch {
+        return "";
+      }
     }
   }
 

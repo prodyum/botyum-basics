@@ -68,6 +68,36 @@ botyum-basics is a modular console assistant that brings everyday voice-assistan
    - `espeak`, `spd-say`, `say`, Windows SAPI (text-to-speech fallbacks)
    - `xclip` / `xsel` (clipboard integration under X11)
 
+### Windows quick install (ffmpeg / Tesseract / Poppler)
+
+These tools are required for camera/screen capture and OCR features under Windows. You can install them via Scoop (user-level, no admin) or Chocolatey (admin).
+
+- Using Scoop (recommended, user-level):
+  ```powershell
+  iwr -useb get.scoop.sh | iex
+  $env:PATH="$HOME\scoop\shims;$env:PATH"
+  scoop install ffmpeg tesseract poppler
+  ffmpeg -version
+  tesseract -v
+  pdftoppm -v
+  ```
+
+- Using Chocolatey (admin PowerShell):
+  ```powershell
+  choco install ffmpeg -y
+  choco install tesseract -y
+  choco install poppler -y
+  ffmpeg -version
+  tesseract -v
+  pdftoppm -v
+  ```
+
+Then run the project setup to verify:
+```powershell
+npm run setup
+```
+You should see a line similar to: `Found: ffmpeg, tesseract, pdftoppm` and warnings for any optional tools not yet installed.
+
 ## Tooling, Scripts, and Debugging
 - `npm run dev` / `npm start` - launches the interactive console menu. The numeric selector works well with screen readers.
 - `npm run setup` - re-run anytime you add optional binaries or rotate environment variables.
