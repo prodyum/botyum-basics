@@ -25,6 +25,7 @@ import ct from "countries-and-timezones";
 import { getCode as getCountryCode } from "country-list";
 import { create, all } from "mathjs";
 import Table from "cli-table3";
+import { spawn } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -133,11 +134,54 @@ async function ttsSay(text) {
     if (isMac()) {
       await exec(`say ${JSON.stringify(text)}`);
     } else if (isWindows()) {
-      const ps =
-        "powershell -NoProfile -Command \"Add-Type -AssemblyName System.Speech; " +
-        "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; " +
-        "$s.Rate = 0; $s.Volume = 100; $s.Speak(" + JSON.stringify(text) + ");\"";
-      await exec(ps);
+      // Güvenli yol: metni dosyaya yaz, PowerShell/VBScript metni dosyadan okuyup SAPI ile söylesin
+      const tmp = os.tmpdir();
+      const msgPath = path.join(tmp, "botyum_tts_msg.txt");
+      const ps1Path = path.join(tmp, "botyum_tts_speak.ps1");
+      try {
+        await fs.writeFile(msgPath, String(text), { encoding: "utf8" });
+        const ps1 = [
+          '$ErrorActionPreference = "Stop"',
+          'Add-Type -AssemblyName System.Speech',
+          '$s = New-Object System.Speech.Synthesis.SpeechSynthesizer',
+          '$s.Rate = 0',
+          '$s.Volume = 100',
+          `$text = Get-Content -LiteralPath "${msgPath.replace(/`/g, '``').replace(/"/g, '`"')}" -Raw -Encoding UTF8`,
+          '$s.Speak($text)'
+        ].join("\r\n");
+        await fs.writeFile(ps1Path, ps1, { encoding: "utf8" });
+        await exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${ps1Path}"`);
+      } catch (psError) {
+        // VBScript fallback: dosyadan oku ve SAPI ile konuş
+        try {
+          const vbsPath = path.join(tmp, "botyum_tts.vbs");
+          const vbs = [
+            'Set sapi=CreateObject("SAPI.SpVoice")',
+            'sapi.Rate = 0',
+            'sapi.Volume = 100',
+            'Dim fso:Set fso = CreateObject("Scripting.FileSystemObject")',
+            `Dim f:Set f = fso.OpenTextFile("${msgPath.replace(/"/g, '""')}", 1)`,
+            'Dim txt:txt = f.ReadAll',
+            'f.Close',
+            'sapi.Speak txt'
+          ].join("\r\n");
+          await fs.writeFile(vbsPath, vbs, { encoding: "utf8" });
+          try {
+            await exec(`cscript //nologo "${vbsPath}"`);
+          } finally {
+            try { await fs.remove(vbsPath); } catch {}
+          }
+        } catch (vbsError) {
+          console.log(warn("Seslendirme Windows üzerinde başlatılamadı. Lütfen hoparlör/cihaz ayarlarını ve izinleri kontrol edin."));
+          if (process.env.DEBUG) {
+            console.log(dim(`PS error: ${psError?.message || psError}`));
+            console.log(dim(`VBS error: ${vbsError?.message || vbsError}`));
+          }
+        }
+      } finally {
+        try { await fs.remove(ps1Path); } catch {}
+        try { await fs.remove(msgPath); } catch {}
+      }
     } else {
       try {
         await exec(`espeak ${JSON.stringify(text)}`);
@@ -147,6 +191,111 @@ async function ttsSay(text) {
     }
   } catch {
     // Basarisizsa sessiz gec
+  }
+}
+
+// Durdurulabilir TTS kontrolu
+let currentTts = null;
+
+function clearCurrentTts() {
+  currentTts = null;
+}
+
+export async function ttsStop() {
+  const ref = currentTts;
+  if (!ref) return;
+  try {
+    if (ref.proc && !ref.proc.killed) {
+      ref.proc.kill("SIGTERM");
+    }
+  } catch {}
+  try {
+    if (typeof ref.cleanup === "function") {
+      await ref.cleanup();
+    }
+  } catch {}
+  clearCurrentTts();
+}
+
+export async function ttsStart(text) {
+  await ttsStop();
+  if (!text) return { stop: ttsStop };
+  const spokenText = String(text);
+  if (isMac()) {
+    const proc = spawn("say", [spokenText]);
+    currentTts = { proc, cleanup: null };
+    proc.on("exit", clearCurrentTts);
+    return { stop: ttsStop };
+  }
+  if (isWindows()) {
+    const tmp = os.tmpdir();
+    const msgPath = path.join(tmp, "botyum_tts_msg.txt");
+    const ps1Path = path.join(tmp, "botyum_tts_speak.ps1");
+    await fs.writeFile(msgPath, spokenText, { encoding: "utf8" });
+    const ps1 = [
+      '$ErrorActionPreference = "Stop"',
+      'Add-Type -AssemblyName System.Speech',
+      '$s = New-Object System.Speech.Synthesis.SpeechSynthesizer',
+      '$s.Rate = 0',
+      '$s.Volume = 100',
+      `$text = Get-Content -LiteralPath "${msgPath.replace(/`/g, '``').replace(/"/g, '`"')}" -Raw -Encoding UTF8`,
+      '$s.Speak($text)'
+    ].join("\r\n");
+    await fs.writeFile(ps1Path, ps1, { encoding: "utf8" });
+    try {
+      const proc = spawn("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1Path], { windowsHide: true });
+      currentTts = {
+        proc,
+        cleanup: async () => {
+          try { await fs.remove(ps1Path); } catch {}
+          try { await fs.remove(msgPath); } catch {}
+        },
+      };
+      proc.on("exit", async () => {
+        await currentTts?.cleanup?.();
+        clearCurrentTts();
+      });
+      return { stop: ttsStop };
+    } catch {
+      const vbsPath = path.join(tmp, "botyum_tts.vbs");
+      const vbs = [
+        'Set sapi=CreateObject("SAPI.SpVoice")',
+        'sapi.Rate = 0',
+        'sapi.Volume = 100',
+        'Dim fso:Set fso = CreateObject("Scripting.FileSystemObject")',
+        `Dim f:Set f = fso.OpenTextFile("${msgPath.replace(/"/g, '""')}", 1)`,
+        'Dim txt:txt = f.ReadAll',
+        'f.Close',
+        'sapi.Speak txt'
+      ].join("\r\n");
+      await fs.writeFile(vbsPath, vbs, { encoding: "utf8" });
+      const proc = spawn("cscript", ["//nologo", vbsPath], { windowsHide: true });
+      currentTts = {
+        proc,
+        cleanup: async () => {
+          try { await fs.remove(vbsPath); } catch {}
+          try { await fs.remove(ps1Path); } catch {}
+          try { await fs.remove(msgPath); } catch {}
+        },
+      };
+      proc.on("exit", async () => {
+        await currentTts?.cleanup?.();
+        clearCurrentTts();
+      });
+      return { stop: ttsStop };
+    }
+  }
+  // Linux vb.
+  try {
+    const proc = spawn("espeak", [spokenText]);
+    currentTts = { proc, cleanup: null };
+    proc.on("exit", clearCurrentTts);
+    return { stop: ttsStop };
+  } catch {
+    const proc = spawn("spd-say", [spokenText]);
+    currentTts = { proc, cleanup: null };
+    proc.on("exit", clearCurrentTts);
+    return { stop: ttsStop };
   }
 }
 
@@ -198,6 +347,8 @@ const ctxBase = {
   readStore,
   writeStore,
   ttsSay,
+  ttsStart,
+  ttsStop,
   isWindows,
   isMac,
   open,

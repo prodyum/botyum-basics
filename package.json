@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node index.js",
     "start": "node index.js",
+    "build": "node -e \"console.log('Bu projede ayrı bir build adımı yok; npm start kullanın');\"",
     "setup": "node scripts/setup.js",
     "postinstall": "node scripts/setup.js"
   },
