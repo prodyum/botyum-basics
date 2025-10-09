@@ -1,193 +1,188 @@
 // modules/voice/speech-tools.js
-// Speech transcription and playback helpers.
+// Minimal wake-word detector: prints when keyword is detected. Other tools removed.
 
-import fs from "fs-extra";
 import path from "path";
-
+import http from "http";
 import { createVoiceUtils } from "../shared/workspace.js";
 
 export function createSpeechToolsGroup(ctx) {
-  const {
-    inquirer,
-    ok,
-    err,
-    warn,
-    dim,
-    title,
-    printDivider,
-    curl,
-    readStore,
-    writeStore,
-    ttsSay,
-    exec,
-    open,
-    isWindows,
-    isMac,
-  } = ctx;
+  const { inquirer, ok, err, dim, exec, isWindows, isMac } = ctx;
 
-  const {
-    BASE,
-    TMP,
-    sleep,
-    trunc,
-    hasCommand,
-    writeClipboard,
-    runTesseract,
-    transcribeFile,
-    sttHelperHTML,
-  } = createVoiceUtils({ exec, isWindows, isMac });
+  const { TMP, hasCommand, transcribeFile } = createVoiceUtils({ exec, isWindows, isMac });
 
-  async function speechToClipboardMenu() {
-    const { mode } = await inquirer.prompt([
-      {
-        type: "list",
-        name: "mode",
-        message: "STT modu:",
-        choices: [
-          { name: "Yerel (ffmpeg + whisper/vosk)", value: "local" },
-          { name: "Chrome Web Speech (tarayıcıda)", value: "chrome" },
-          { name: "Ses dosyasından transkript", value: "file" },
-          { name: "Geri", value: "back" },
-        ],
-      },
-    ]);
-    if (mode === "back") return;
-
-    if (mode === "local") {
-      const haveFFmpeg = await hasCommand("ffmpeg");
-      if (!haveFFmpeg) {
-        console.log(err("ffmpeg gerekli."));
-        return;
-      }
-      const { secs } = await inquirer.prompt([
-        { type: "number", name: "secs", message: "Kaç saniye kaydedilsin?", default: 10 },
-      ]);
-      const wav = path.join(TMP, `mic-${Date.now()}.wav`);
-      try {
-        if (isMac()) {
-          await exec(`ffmpeg -f avfoundation -i ":0" -t ${secs} -ac 1 -ar 16000 -y "${wav}"`);
-        } else if (isWindows()) {
-          await exec(`ffmpeg -f dshow -i audio="virtual-audio-capturer" -t ${secs} -ac 1 -ar 16000 -y "${wav}"`);
-        } else {
-          await exec(`ffmpeg -f alsa -i default -t ${secs} -ac 1 -ar 16000 -y "${wav}"`);
+  async function wakeWordBrowserFallback(wake) {
+    return new Promise(async (resolve) => {
+      const server = http.createServer((req, res) => {
+        if (req.method === "GET" && req.url === "/") {
+          const html = `<!doctype html><meta charset=\"utf-8\"><title>Wake Word Dinleme</title>
+<style>body{font:16px system-ui;padding:24px}button{font:16px;padding:8px 12px}</style>
+<h1>Wake Word Dinleme</h1>
+<p>Butona tıkla ve anahtar kelimeyi söyle: <b>${wake}</b></p>
+<button id=\"start\">Başlat</button>
+<script>
+let rec;
+document.getElementById('start').onclick = ()=>{
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ alert('Tarayıcı Web Speech API desteklemiyor. Chrome/Edge deneyin.'); return; }
+  rec = new SR(); rec.lang='tr-TR'; rec.interimResults=true; rec.continuous=true;
+  const wake = ${JSON.stringify(String(wake || "botyum").toLowerCase())};
+  rec.onresult = (e)=>{
+    let text='';
+    for(let i=e.resultIndex;i<e.results.length;i++){ text += e.results[i][0].transcript; }
+    if(text.toLowerCase().includes(wake)){
+      fetch('/hit', {method:'POST'}).catch(()=>{});
+      alert('Anahtar kelime yakalandı!');
+      rec && rec.stop();
+      window.close();
+    }
+  };
+  rec.start();
+};
+<\/script>`;
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(html);
+          return;
         }
-      } catch (error) {
-        console.log(err(`Mikrofon kaydı başarısız: ${error.message}`));
-        return;
-      }
-      const text = (await transcribeFile(wav)).trim();
-      if (text) {
-        await writeClipboard(text);
-        console.log(ok("Panoya yazıldı."));
-      }
-      return;
-    }
+        if (req.method === "POST" && req.url === "/hit") {
+          res.writeHead(200, { "Content-Type": "text/plain" });
+          res.end("ok");
+          console.log(ok("Anahtar kelime yakalandı."));
+          try { server.close(); } catch {}
+          resolve();
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      });
+      server.listen(0, "127.0.0.1", async () => {
+        const address = server.address();
+        const port = typeof address === "object" && address ? address.port : 0;
+        const url = `http://127.0.0.1:${port}/`;
+        await ctx.open(url);
+      });
+      // Güvenlik için maksimum bekleme: 2 dakika
+      setTimeout(() => {
+        try { server.close(); } catch {}
+        resolve();
+      }, 120000);
+    });
+  }
 
-    if (mode === "file") {
-      const { file } = await inquirer.prompt([
-        { type: "input", name: "file", message: "Ses dosyası yolu (wav/mp3/m4a):" },
-      ]);
-      const text = (await transcribeFile(file)).trim();
-      if (text) {
-        await writeClipboard(text);
-        console.log(ok("Panoya yazıldı."));
+  async function enumerateWindowsAudioInputs() {
+    try {
+      const { stdout, stderr } = await exec("ffmpeg -hide_banner -list_devices true -f dshow -i dummy");
+      const text = String(stdout || "") + String(stderr || "");
+      const lines = text.split(/\r?\n/);
+      const names = [];
+      let inAudioSection = false;
+      for (const line of lines) {
+        if (/DirectShow audio devices/i.test(line)) {
+          inAudioSection = true;
+          continue;
+        }
+        if (inAudioSection && /DirectShow video devices/i.test(line)) {
+          break;
+        }
+        if (inAudioSection) {
+          const m = line.match(/\"([^\"]+)\"/);
+          if (m && m[1]) {
+            names.push(m[1]);
+          }
+        }
       }
-      return;
-    }
-
-    if (mode === "chrome") {
-      const html = sttHelperHTML();
-      const tmpPath = path.join(TMP, `stt-helper-${Date.now()}.html`);
-      await fs.writeFile(tmpPath, html, "utf8");
-      await open(tmpPath);
-      console.log(ok("Tarayıcı sayfası açıldı. Mikrofon izni ver ve konuşma panoya düşecek."));
+      // Tekrarlananları ayıkla
+      return Array.from(new Set(names));
+    } catch {
+      return [];
     }
   }
 
-  async function wakeWordHandsFreeMenu() {
-    const { wake, secs } = await inquirer.prompt([
+  async function wakeWordMinimalMenu() {
+    const { wake, secs, repeat } = await inquirer.prompt([
       { type: "input", name: "wake", message: "Uyandırma sözcüğü:", default: "botyum" },
       { type: "number", name: "secs", message: "Dinleme penceresi (sn):", default: 7 },
+      { type: "confirm", name: "repeat", message: "Sürekli denensin mi?", default: false },
     ]);
-    console.log(dim("Basit STT + uyandırma döngüsü (ffmpeg + whisper/vosk). Ctrl+C ile çık."));
     const haveFFmpeg = await hasCommand("ffmpeg");
+    const haveWhisper = (await hasCommand("main")) || (await hasCommand("whisper.cpp"));
+    const haveVosk = (await hasCommand("vosk-transcriber")) || (await hasCommand("vosk"));
+    if (!haveWhisper && !haveVosk) {
+      console.log(dim("Yerel STT bulunamadı (whisper/vosk). Tarayıcı tabanlı dinlemeye geçiliyor..."));
+      await wakeWordBrowserFallback(wake);
+      return;
+    }
     if (!haveFFmpeg) {
       console.log(err("ffmpeg yok."));
       return;
     }
-    while (true) {
+
+    let dshowDevice = "virtual-audio-capturer";
+    if (isWindows()) {
+      const inputs = await enumerateWindowsAudioInputs();
+      if (inputs.length) {
+        const { device } = await inquirer.prompt([
+          { type: "list", name: "device", message: "Mikrofonunuzu seçin:", choices: inputs },
+        ]);
+        dshowDevice = device || dshowDevice;
+      } else {
+        const { device } = await inquirer.prompt([
+          { type: "input", name: "device", message: "Mikrofon cihaz adı (dshow)", default: dshowDevice },
+        ]);
+        dshowDevice = device || dshowDevice;
+      }
+    }
+
+    async function recordAndCheckOnce() {
       const tmp = path.join(TMP, `wake-${Date.now()}.wav`);
       try {
         if (isMac()) {
-          await exec(`ffmpeg -f avfoundation -i ":0" -t ${secs} -ac 1 -ar 16000 -y "${tmp}"`);
+          await exec(`ffmpeg -nostdin -hide_banner -loglevel error -f avfoundation -i ":0" -t ${secs} -ac 1 -ar 16000 -y "${tmp}"`);
         } else if (isWindows()) {
-          await exec(`ffmpeg -f dshow -i audio="virtual-audio-capturer" -t ${secs} -ac 1 -ar 16000 -y "${tmp}"`);
+          await exec(`ffmpeg -nostdin -hide_banner -loglevel error -f dshow -i audio="${dshowDevice}" -t ${secs} -ac 1 -ar 16000 -y "${tmp}"`);
         } else {
-          await exec(`ffmpeg -f alsa -i default -t ${secs} -ac 1 -ar 16000 -y "${tmp}"`);
+          await exec(`ffmpeg -nostdin -hide_banner -loglevel error -f alsa -i default -t ${secs} -ac 1 -ar 16000 -y "${tmp}"`);
         }
       } catch {
         console.log(err("Mikrofon/ffmpeg erişilemedi."));
-        return;
+        return false;
       }
       const text = (await transcribeFile(tmp)).toLowerCase();
-      if (!text) continue;
-      if (text.includes(wake.toLowerCase())) {
-        console.log(ok("Uyandırma sözcüğü algılandı."));
-        await ttsSay("Dinliyorum");
-        const { cmd } = await inquirer.prompt([
-          { type: "input", name: "cmd", message: "Komut (metin):" },
-        ]);
-        await ttsSay(`Komut alındı: ${cmd}`);
-        break;
+      if (text && text.includes(wake.toLowerCase())) {
+        console.log(ok("Anahtar kelime yakalandı."));
+        return true;
       }
+      return false;
     }
-  }
 
-  async function transcribeAudioMenu() {
-    const { file } = await inquirer.prompt([
-      { type: "input", name: "file", message: "Ses dosyası (wav/mp3/m4a):" },
-    ]);
-    const text = await transcribeFile(file);
-    if (text) {
-      console.log(ok("Transkript (ilk 2KB):\n") + trunc(text, 2000));
-    }
-  }
-
-  async function voiceNotesMenu() {
-    const haveFFmpeg = await hasCommand("ffmpeg");
-    if (!haveFFmpeg) {
-      console.log(err("ffmpeg gerekli."));
+    if (!repeat) {
+      console.log(dim("Mikrofon dinleniyor..."));
+      const hit = await recordAndCheckOnce();
+      if (!hit) {
+        console.log(dim("Anahtar kelime bulunamadı. Tarayıcı tabanlı dinlemeye geçiliyor..."));
+        await wakeWordBrowserFallback(wake);
+      }
       return;
     }
-    const { secs } = await inquirer.prompt([
-      { type: "number", name: "secs", message: "Süre (sn):", default: 30 },
-    ]);
-    const dir = path.join(BASE, "voice-notes");
-    await fs.ensureDir(dir);
-    const out = path.join(dir, `note-${Date.now()}.m4a`);
-    try {
-      if (isMac()) {
-        await exec(`ffmpeg -f avfoundation -i ":0" -t ${secs} -y "${out}"`);
-      } else if (isWindows()) {
-        await exec(`ffmpeg -f dshow -i audio="virtual-audio-capturer" -t ${secs} -y "${out}"`);
-      } else {
-        await exec(`ffmpeg -f alsa -i default -t ${secs} -y "${out}"`);
+    console.log(dim("Mikrofon dinleniyor (tekrarlı kip). Ctrl+C ile çık."));
+    let attempts = 0;
+    while (true) {
+      const hit = await recordAndCheckOnce();
+      if (hit) break;
+      attempts += 1;
+      if (attempts >= 1) {
+        console.log(dim("Yerelde algılanamadı. Tarayıcı tabanlı dinlemeye geçiliyor..."));
+        await wakeWordBrowserFallback(wake);
+        break;
       }
-      console.log(ok("Kaydedildi: " + out));
-    } catch (error) {
-      console.log(err(`Kayıt hatası: ${error.message}`));
     }
   }
 
   return {
     id: "speech-tools",
     label: "Ses ve Konuşma",
-    description: "Konuşma tanıma, wake word ve sesli notlar.",
+    description: "Wake-word: anahtar kelime yakalandığında bildirir.",
     items: [
-      { id: "speech-clipboard", label: "Konuşmayı panoya aktar", run: speechToClipboardMenu },
-      { id: "wake-word", label: "Wake word kipi", run: wakeWordHandsFreeMenu },
-      { id: "transcribe", label: "Ses dosyası çözümle", run: transcribeAudioMenu },
-      { id: "voice-notes", label: "Sesli notlar", run: voiceNotesMenu },
+      { id: "wake-word", label: "Wake word kipi", run: wakeWordMinimalMenu },
     ],
   };
 }
