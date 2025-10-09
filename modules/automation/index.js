@@ -12,6 +12,7 @@ import { createUrlShortenerGroup } from "./url-shortener.js";
 import { createFileFinderGroup } from "./file-finder.js";
 import { createTipSplitGroup } from "./tip-split.js";
 import { createReadabilityGroup } from "./readability.js";
+import { createRoutinesGroup } from "./routines.js";
 
 const MODULE_ID = "automation";
 const MODULE_LABEL = "Otomasyon ve Arac Kutusu";
@@ -21,6 +22,7 @@ const MODULE_ORDER = 6;
 function buildFeatureGroups(ctx) {
   return [
     createWebhookSenderGroup(ctx),
+    createRoutinesGroup(ctx),
     createIcsEventGroup(ctx),
     createSunMoonGroup(ctx),
     createShoppingListGroup(ctx),
