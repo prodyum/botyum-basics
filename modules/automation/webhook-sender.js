@@ -88,7 +88,7 @@ export function createWebhookSenderGroup(ctx) {
   return {
     id: "webhook-sender",
     label: "Webhook gönderici",
-    description: "Akıllı ev / otomasyon webhooklarını yönetir.",
+    description: "Otomasyon webhooklarını yönetir.",
     items: [{ id: "webhook-sender-run", label: "Webhook gönder", run: webhookMenu }],
   };
 }
