@@ -21,6 +21,21 @@ export function createMusicSearchGroup(ctx) {
     }
   }
 
+  function normalizeUrlForDedup(rawUrl) {
+    const real = unwrapDuckDuckGo(rawUrl) || "";
+    try {
+      const u = new URL(real);
+      // Fragmanları yok say
+      u.hash = "";
+      // DDG yönlendirme parametreleri zaten yok; genel tekilleştirme için küçük harf ve sondaki "/" trim
+      let s = u.toString();
+      if (s.endsWith("/")) s = s.slice(0, -1);
+      return s.toLowerCase();
+    } catch {
+      return real.toLowerCase();
+    }
+  }
+
   async function searchMusic() {
     const { term } = await inquirer.prompt([{ type: "input", name: "term", message: "Müzik araması (şarkı/album/sanatçı)" }]);
     if (!term) return;
@@ -45,7 +60,7 @@ export function createMusicSearchGroup(ctx) {
       const byUrl = new Map();
       function pushUnique(arr) {
         for (const r of arr) {
-          const key = r.url;
+          const key = normalizeUrlForDedup(r.url);
           if (!key) continue;
           if (!byUrl.has(key)) byUrl.set(key, r);
         }
