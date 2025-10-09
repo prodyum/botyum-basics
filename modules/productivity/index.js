@@ -13,6 +13,7 @@ import { createClipboardGroup } from "./clipboard.js";
 import { createTemplatesGroup } from "./templates.js";
 import { createMediaLauncherGroup } from "./media-launcher.js";
 import { createComfortShortcutsGroup } from "./comfort-shortcuts.js";
+import { createGoogleCalendarGroup } from "./google-calendar.js";
 
 const MODULE_ID = "productivity";
 const MODULE_LABEL = "Planlama ve Verimlilik";
@@ -23,6 +24,7 @@ function buildFeatureGroups(ctx) {
   return [
     createCalendarImportGroup(ctx),
     createCalendarGroup(ctx),
+    createGoogleCalendarGroup(ctx),
     createNaturalRemindersGroup(ctx),
     createEmailDigestGroup(ctx),
     createRssNewsGroup(ctx),

@@ -4,6 +4,7 @@ import { createCameraPhotoGroup } from "./camera-photo.js";
 import { createCameraVideoGroup } from "./camera-video.js";
 import { createScreenshotGroup } from "./screenshot.js";
 import { createOcrGroup } from "./ocr.js";
+import { createQrScannerGroup } from "./qr-scanner.js";
 
 const MODULE_ID = "vision";
 const MODULE_LABEL = "Goruntu ve OCR";
@@ -16,6 +17,7 @@ function buildFeatureGroups(ctx) {
     createCameraVideoGroup(ctx),
     createScreenshotGroup(ctx),
     createOcrGroup(ctx),
+    createQrScannerGroup(ctx),
   ].filter(Boolean);
 }
 
