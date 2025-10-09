@@ -2,7 +2,6 @@
 
 import { createTodaySummaryGroup } from "./today-summary.js";
 import { createSystemInfoGroup } from "./system-info.js";
-import { createMapsLinksGroup } from "./maps-links.js";
 import { createPackageTrackingGroup } from "./package-tracking.js";
 import { createTimezoneConverterGroup } from "./timezone-converter.js";
 import { createDictionaryEnTrGroup } from "./dictionary-en-tr.js";
@@ -23,7 +22,6 @@ function buildFeatureGroups(ctx) {
   return [
     createTodaySummaryGroup(ctx),
     createSystemInfoGroup(ctx),
-    createMapsLinksGroup(ctx),
     createPackageTrackingGroup(ctx),
     createTimezoneConverterGroup(ctx),
     createDictionaryEnTrGroup(ctx),
