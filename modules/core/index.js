@@ -6,6 +6,7 @@ import { createFetchContentGroup } from "./web/fetch-content.js";
 import { createGoogleSearchGroup } from "./web/google-search.js";
 import { createWikiQaGroup } from "./web/wiki-qa.js";
 import { createQuickLinksGroup } from "./web/quick-links.js";
+import { createPhoneLinksGroup } from "./phone-links.js";
 
 const MODULE_ID = "core";
 const MODULE_LABEL = "Gundelik Yardimcilar";
@@ -20,6 +21,7 @@ function buildFeatureGroups(ctx) {
     createGoogleSearchGroup(ctx),
     createWikiQaGroup(ctx),
     createQuickLinksGroup(ctx),
+    createPhoneLinksGroup(ctx),
   ].filter(Boolean);
 }
 
