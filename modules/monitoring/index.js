@@ -2,6 +2,7 @@
 
 import { createPageWatchGroup } from "./page-watch.js";
 import { createTrafficLinksGroup } from "./traffic-links.js";
+import { createTestSummaryGroup } from "./test-summary.js";
 
 const MODULE_ID = "monitoring";
 const MODULE_LABEL = "Izleme ve Bildirimler";
@@ -12,6 +13,7 @@ function buildFeatureGroups(ctx) {
   return [
     createPageWatchGroup(ctx),
     createTrafficLinksGroup(ctx),
+    createTestSummaryGroup(ctx),
   ].filter(Boolean);
 }
 

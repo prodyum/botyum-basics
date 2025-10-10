@@ -12,7 +12,7 @@ import { createExpensesGroup } from "./expenses.js";
 import { createClipboardGroup } from "./clipboard.js";
 import { createTemplatesGroup } from "./templates.js";
 import { createMediaLauncherGroup } from "./media-launcher.js";
-import { createComfortShortcutsGroup } from "./comfort-shortcuts.js";
+// Placeholder konfor kısayolları kaldırıldı
 import { createGoogleCalendarGroup } from "./google-calendar.js";
 
 const MODULE_ID = "productivity";
@@ -35,7 +35,6 @@ function buildFeatureGroups(ctx) {
     createClipboardGroup(ctx),
     createTemplatesGroup(ctx),
     createMediaLauncherGroup(ctx),
-    createComfortShortcutsGroup(ctx),
   ].filter(Boolean);
 }
 
